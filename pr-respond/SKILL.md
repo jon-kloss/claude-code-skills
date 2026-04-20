@@ -21,8 +21,9 @@ MEDIUM FREEDOM - Socratic analysis per comment is mandatory. User always chooses
 | 5 | Generate 3 options: Agree & Act / Explore & Discuss / Respectfully Decline |
 | 6 | User picks via AskUserQuestion (or writes their own) |
 | 7 | Make code changes for accepted findings BEFORE posting responses |
-| 8 | Post: `gh api repos/{o}/{r}/pulls/{n}/comments/{id}/replies -f body="..."` |
-| 9 | Verify: count responses posted == count comments received |
+| 8 | Commit and push all changes to the PR branch |
+| 9 | Post replies with change summary: `gh api .../{id}/replies -f body="..."` |
+| 10 | Verify: count responses posted == count comments received |
 </quick_reference>
 
 <when_to_use>
@@ -82,16 +83,56 @@ Present per comment: Socratic summary, category, 3 options. User picks, edits, o
 For every comment where the user chose "Agree & Act":
 1. Read the relevant file and understand the context
 2. Make the code change
-3. Verify it doesn't break anything (build/test if appropriate)
-4. THEN post the response referencing what was changed
+3. Run tests/build to verify the change doesn't break anything
+4. Track what you changed: file path, what was changed, and why
 
-**Do NOT post "I'll fix this" and leave the fix for later.** The code change and the response are a unit -- ship both or neither.
+**Do NOT post "I'll fix this" and leave the fix for later.** The code change, the commit, and the response are a unit -- ship all three or none.
 
-## 7. Post responses and verify completeness
+## 7. Commit and push all changes to the PR branch
+
+After ALL code changes are made and verified:
+
+```bash
+# Stage the specific files you changed
+git add <file1> <file2> ...
+
+# Commit with a message referencing the PR review
+git commit -m "address PR review feedback
+
+- <summary of change 1>
+- <summary of change 2>
+
+Co-Authored-By: Claude <noreply@anthropic.com>"
+
+# Push to the PR branch
+git push
+
+# Capture the commit SHA and build the link
+COMMIT_SHA=$(git rev-parse HEAD)
+# Link format: https://github.com/{owner}/{repo}/commit/{sha}
+```
+
+**Verify the push succeeded.** If it fails (e.g., branch protection, merge conflict), stop and alert the user -- do NOT post responses claiming changes were made if the push failed.
+
+**Do NOT post any responses until the push is confirmed.** The reviewer must be able to see the changes on the PR before reading your replies.
+
+## 8. Post responses with change summaries and verify completeness
+
+For "Agree & Act" responses, include a concrete summary of what was changed with a clickable link to the commit:
+
+```
+Fixed — changed `<what>` in `<file>` (<why>).
+
+See [<short-sha>](https://github.com/{owner}/{repo}/commit/{full-sha}).
+```
+
+The commit link is mandatory. The reviewer must be able to click through to see the exact diff.
+
+For "Explore & Discuss" and "Respectfully Decline" responses, post the user's chosen text as-is.
 
 ```bash
 gh api repos/{owner}/{repo}/pulls/{number}/comments/{comment_id}/replies \
-  --method POST -f body="<chosen response>"
+  --method POST -f body="<chosen response with change summary>"
 ```
 
 After posting all responses, verify against the original inventory:
@@ -99,7 +140,7 @@ After posting all responses, verify against the original inventory:
 - Compare to total comments from Step 1
 - If any comment was not addressed, flag it immediately: "Warning: comment {id} on {file}:{line} was not addressed"
 
-**The skill is not complete until every comment has a posted response.**
+**The skill is not complete until every comment has a posted response AND all code changes have been pushed.**
 
 </the_process>
 
@@ -129,6 +170,12 @@ After posting all responses, verify against the original inventory:
 </example>
 
 <example>
+<scenario>Agent makes code changes and posts responses but never commits or pushes</scenario>
+<why_it_fails>The changes exist only locally. The reviewer reads "Fixed in X" but sees no new commits on the PR. They assume nothing happened, trust erodes, and the review stalls. Even worse -- the local changes may be lost if the working directory is cleaned up.</why_it_fails>
+<correction>After making all code changes: stage, commit, push to the PR branch. Verify the push succeeded. Only THEN post responses. Include the commit SHA in "Agree & Act" replies so the reviewer can click through to the exact change.</correction>
+</example>
+
+<example>
 <scenario>Agent addresses the Critical findings but skips the Suggestions and Nits</scenario>
 <why_it_fails>Suggestions and Nits are still comments that deserve acknowledgment. Ignoring them signals "I only care about blocking issues." Even a brief "Good catch, fixed" or "Intentional -- here's why" takes 10 seconds and shows respect for the reviewer's time.</why_it_fails>
 <correction>Every comment gets a response, regardless of severity. Low-severity comments can get shorter responses, but they cannot be skipped.</correction>
@@ -143,7 +190,9 @@ After posting all responses, verify against the original inventory:
 5. **ALWAYS let user write their own** -- AskUserQuestion "Other" covers this
 6. **ALWAYS address EVERY comment** -- build inventory first, verify count at end. Zero comments may be skipped, regardless of severity
 7. **ALWAYS make code changes BEFORE posting "Agree & Act" responses** -- the fix and the response ship together. Never post a promise without the receipt
-8. **ALWAYS verify completeness before claiming done** -- count responses posted vs comments received. If they don't match, you're not done
+8. **ALWAYS commit and push changes BEFORE posting responses** -- the reviewer must see the changes on the PR. If the push fails, do NOT post responses claiming fixes were made
+9. **ALWAYS include a concrete change summary with a commit link in "Agree & Act" responses** -- file path, what changed, and a clickable `https://github.com/{owner}/{repo}/commit/{sha}` link. "Fixed!" with no detail is not a response
+10. **ALWAYS verify completeness before claiming done** -- count responses posted vs comments received. If they don't match, you're not done
 
 **Excuses that don't work:**
 - "Obviously right, just agree" -> Still offer 3 options. User has context you lack.
@@ -153,6 +202,9 @@ After posting all responses, verify against the original inventory:
 - "That comment was just a suggestion, doesn't need a reply" -> Every comment needs a reply. A reviewer who took time to write deserves acknowledgment.
 - "I addressed the important ones, the rest are minor" -> Minor comments still need responses. Verify your count matches.
 - "I'll fix it in a follow-up" -> If you chose Agree & Act, fix it now. If it genuinely belongs in a follow-up, say so explicitly in the response and get user approval.
+- "I'll push later" -> No. Push before posting responses. The reviewer needs to see the changes.
+- "The push failed but I'll post the response anyway" -> Stop. If the push failed, the reviewer can't see your changes. Fix the push first.
+- "Fixed!" -> Not a response. State what file, what changed, and include a clickable commit link.
 </critical_rules>
 
 <integration>
